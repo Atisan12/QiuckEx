@@ -158,3 +158,57 @@ def quickex_hook():
     # handle event...
     return "ok", 200
 ```
+
+---
+
+## Contract registry
+
+Read the currently active version of a contract from the registry.
+
+### Get a contract registry entry
+
+`GET /contracts/:id`
+
+Response `200 OK` includes an `ETag` header derived from the active contract version:
+
+```json
+{
+  "id": "contract_01HXYZ...",
+  "version": 3,
+  "etag": "\"v3\"",
+  "updated_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Conditional requests
+
+Send `If-None-Match` with a previously received `ETag` to avoid re-downloading an unchanged entry:
+
+```
+GET /contracts/contract_01HXYZ...
+If-None-Match: "v3"
+```
+
+- `304 Not Modified` is returned only when the supplied `ETag` matches the **current** active version.
+- `200 OK` with the current body and a new `ETag` is returned when the version has changed.
+
+### Rollback
+
+`POST /contracts/:id/rollback`
+
+Rolls the contract back to a previous version. A successful rollback:
+
+- Bumps the registry `version` and therefore changes the `ETag`.
+- Invalidates the affected backend caches, so the next read returns the rolled-back version.
+- Causes conditional requests carrying the pre-rollback `ETag` to return `200 OK` with the rolled-back version instead of a stale `304 Not Modified`.
+
+Response `200 OK`:
+
+```json
+{
+  "id": "contract_01HXYZ...",
+  "version": 4,
+  "etag": "\"v4\"",
+  "updated_at": "2024-01-01T00:00:05.000Z"
+}
+```

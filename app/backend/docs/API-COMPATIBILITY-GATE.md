@@ -143,3 +143,30 @@ If the gate fails unexpectedly or a bad baseline was merged:
 If a breaking change was released and must be undone, follow the standard
 service rollback procedure in addition to reverting the baseline, so that the
 deployed API and the baseline are consistent.
+
+## Contract-Registry Cache Invalidation on Rollback
+
+The contract registry serves versioned contract entries with an `ETag` derived
+from the active contract version. Clients may cache these entries and issue
+conditional requests (`If-None-Match`) to avoid re-downloading unchanged data.
+
+When an operator rolls back a contract version, the registry must not continue
+serving the pre-rollback entry from cache. Rollback therefore:
+
+1. Updates the registry's active version and recomputes the `ETag` so it
+   reflects the rolled-back version (the `ETag` changes even when rolling back
+   to a previously seen version).
+2. Invalidates the affected backend caches (registry entry cache and any
+   downstream caches keyed by contract version) so the next read is served from
+   the rolled-back version rather than a stale cached copy.
+
+As a result:
+
+- A subsequent read after rollback returns the rolled-back version.
+- Conditional requests carrying the pre-rollback `ETag` do **not** receive a
+  stale `304 Not Modified`; they receive the rolled-back representation with the
+  new `ETag`.
+
+Operators performing a rollback should verify the registry `ETag` changed and
+that a conditional request with the old `ETag` returns `200` with the
+rolled-back version before considering the rollback complete.
