@@ -158,3 +158,47 @@ def quickex_hook():
     # handle event...
     return "ok", 200
 ```
+
+---
+
+## Payment links
+
+### Expired payment links
+
+A payment link has an `expires_at` timestamp. Once that time has passed the link is **expired** and can no longer be used to sign or submit a payment.
+
+`GET /links/:id` returns the link with its expiry information so clients can render an expired state:
+
+```json
+{
+  "id": "link_01HXYZ...",
+  "amount": "25.0000000",
+  "asset": "XLM",
+  "recipient": "G...",
+  "owner": {
+    "username": "alice",
+    "profile_url": "/u/alice"
+  },
+  "status": "expired",
+  "expires_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+- `status` is `expired` when `expires_at` is in the past.
+- `expires_at` is the authoritative expiry timestamp; clients should display it (localized to the viewer's locale) rather than hardcoding copy.
+- `owner.profile_url` points at the recipient's public profile so viewers can navigate safely away from the stale link.
+
+#### Recovery behavior
+
+- An expired link **must not** expose a signing or payment CTA. Attempting to submit a payment against an expired link is rejected by the API with `410 Gone`.
+- Recovery is limited to safe navigation: viewing the owner's profile (`owner.profile_url`) or, when the owner has enabled it, requesting a fresh link. Requesting a new link never mutates the original link's `amount` or `recipient`; it creates a new link that the owner must re-share.
+- No recovery action silently changes the amount or recipient of the original link.
+
+Response `410 Gone` when submitting a payment to an expired link:
+
+```json
+{
+  "error": "link_expired",
+  "expires_at": "2024-01-01T00:00:00.000Z"
+}
+```
