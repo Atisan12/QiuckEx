@@ -262,3 +262,47 @@ Response `200 OK`:
   "updated_at": "2024-01-01T00:00:05.000Z"
 }
 ```
+
+---
+
+## API compatibility reporting
+
+The compatibility gate compares the current API surface against a recorded baseline and reports breaking changes. Beyond route removal, the report also flags response-shape drift so consumers are not surprised by silent contract changes.
+
+### Breaking-change classes
+
+| Class | Example | Reported as |
+| --- | --- | --- |
+| Route removed | `DELETE /webhooks/:id` no longer exists | `route_removed` |
+| Required field added | `frequency` becomes required on `PUT /notifications/preferences` | `required_field_added` |
+| Field removed | `updated_at` dropped from the preferences response | `field_removed` |
+| Type changed | `version` changes from `number` to `string` | `type_changed` |
+| Enum value removed | `weekly` removed from supported frequencies | `enum_value_removed` |
+| Error response removed | documented `422` no longer returned | `error_response_removed` |
+
+### Report format
+
+Each finding identifies the affected route and field:
+
+```json
+{
+  "breaking": true,
+  "findings": [
+    {
+      "route": "PUT /notifications/preferences",
+      "field": "frequency",
+      "class": "enum_value_removed",
+      "detail": "enum value 'weekly' no longer accepted"
+    },
+    {
+      "route": "GET /contracts/:id",
+      "field": "version",
+      "class": "type_changed",
+      "detail": "expected number, found string"
+    }
+  ]
+}
+```
+
+- Unchanged schemas produce `"breaking": false` with an empty `findings` array.
+- Additive, non-breaking changes (new optional fields, new routes) are not reported as breaking.

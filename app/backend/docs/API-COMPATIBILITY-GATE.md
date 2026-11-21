@@ -14,6 +14,7 @@ The gate is intended to catch:
 - Changes to field types or required/optional status.
 - Changes to enum values that are part of the public contract.
 - Changes to authentication or authorization requirements on an endpoint.
+- Removed or changed documented error responses.
 
 Additive, backwards-compatible changes (new endpoints, new optional fields) are
 allowed and do not fail the gate.
@@ -37,6 +38,52 @@ against the baseline. The diff is classified as:
 - **Compatible** — additive changes only; the gate passes.
 - **Breaking** — any incompatible change; the gate fails unless an explicit
   override is present.
+
+## Breaking-Change Classes
+
+The report comparison classifies each detected change into one of the
+following breaking-change classes. Every entry in the report identifies the
+affected route (path + method) and, where applicable, the affected field.
+
+| Class | Description | Example |
+| --- | --- | --- |
+| `route-removed` | A path or method present in the baseline is gone. | `DELETE /v1/widgets/{id}` removed |
+| `field-removed` | A response field present in the baseline is gone. | `widget.color` removed |
+| `field-required` | An optional field became required, or a required field was added. | `widget.name` now required |
+| `field-type-changed` | A field's type changed. | `widget.count` `integer` → `string` |
+| `enum-value-removed` | An enum value part of the contract was removed. | `widget.status` lost `archived` |
+| `error-response-removed` | A documented error response was removed. | `404` removed from `GET /v1/widgets/{id}` |
+| `error-response-changed` | A documented error response's status or schema changed. | `409` → `422` on `POST /v1/widgets` |
+
+Each report entry has the shape:
+
+```json
+{
+  "class": "field-type-changed",
+  "route": "GET /v1/widgets/{id}",
+  "field": "widget.count",
+  "baseline": "integer",
+  "candidate": "string"
+}
+```
+
+For route-level classes (`route-removed`, `error-response-removed`,
+`error-response-changed`) the `field` is `null` and the affected response status
+is reported in `baseline`/`candidate`.
+
+## Fixtures
+
+The gate's test suite ships fixtures under `app/backend/test/fixtures/api-compat/`
+that demonstrate each breaking-change class above, plus an unchanged-schema
+fixture that must pass. Each fixture is a baseline/candidate pair; the expected
+report is asserted so that a regression in classification is caught.
+
+- `unchanged/` — identical baseline and candidate; the gate passes with an
+  empty report.
+- `route-removed/`, `field-removed/`, `field-required/`, `field-type-changed/`,
+  `enum-value-removed/`, `error-response-removed/`, `error-response-changed/` —
+  each produces exactly one report entry of the matching class naming the
+affected route and field.
 
 ## Configuration
 
