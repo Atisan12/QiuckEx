@@ -10,6 +10,28 @@ Authorization: Bearer <access_token>
 
 ---
 
+## API keys
+
+API keys authenticate server-to-server calls. Each key is scoped to a user and a set of capabilities.
+
+### Revoke an API key
+
+`DELETE /api-keys/:id`
+
+Response `204 No Content`.
+
+### Revocation propagation
+
+Authorization decisions for API keys are cached in-process to keep guard checks fast. Revocation is therefore **eventually consistent** across instances:
+
+- Revoking a key invalidates the cache entry on the instance that handled the request immediately.
+- Other instances revalidate cached authorization against the authoritative store at least once every **60 seconds** (the documented bound). A revoked key therefore loses access on every instance within 60 seconds of revocation.
+- If the authoritative store cannot be reached during revalidation, the guard **fails closed**: the request is denied rather than served from a stale cache entry.
+
+Clients that need immediate, cluster-wide revocation should treat the 60-second bound as the contract and not rely on sub-second propagation.
+
+---
+
 ## Webhooks
 
 Register a webhook URL to receive a `POST` request whenever a payment to one of your QuickEx links is confirmed on the Stellar network.
