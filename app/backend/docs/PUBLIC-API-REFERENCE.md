@@ -116,6 +116,34 @@ Response `503 Service Unavailable` (transient upstream failure, payment still pe
 
 ---
 
+## Reconciliation
+
+Reconciliation runs over a ledger interval. To keep each run within request time and memory limits, a run processes a **bounded ledger range** per job and persists a resumable cursor with the run metadata.
+
+### Bounded range & cursor
+
+- Each job processes at most `limit` ledgers per invocation. `limit` is configurable but clamped to a safe range (`min`–`max`); out-of-range values are rejected or clamped to the nearest bound.
+- The run metadata records a `cursor` (the last fully processed ledger sequence). A restart resumes from `cursor + 1`, so no ledger is skipped or double-counted.
+- Progress is observable via the run metadata: `cursor`, `limit`, `processed`, and `complete`.
+
+Response `200 OK` (run metadata):
+
+```json
+{
+  "run_id": "rec_01HXYZ...",
+  "from_ledger": 1000,
+  "to_ledger": 5000,
+  "cursor": 1499,
+  "limit": 500,
+  "processed": 500,
+  "complete": false
+}
+```
+
+When `complete` is `true`, `cursor` equals `to_ledger` and the run is finished. Restarting an incomplete run resumes from `cursor + 1`.
+
+---
+
 ## Webhook payload
 
 Deliveries are sent as `POST` requests with `Content-Type: application/json`.
