@@ -68,6 +68,56 @@ Response `204 No Content`.
 
 ---
 
+## Notification preferences
+
+Update the notification preferences for the authenticated user.
+
+### Update notification preferences
+
+`PUT /notifications/preferences`
+
+Request body:
+
+```json
+{
+  "channels": ["email", "push"],
+  "frequency": "daily"
+}
+```
+
+- `channels` (required) — array of supported channel names. Supported values: `email`, `push`, `sms`, `in_app`.
+- `frequency` (required) — one of the supported frequency options: `instant`, `daily`, `weekly`, `never`.
+
+Preferences are always scoped to the authenticated user; a request can only update the caller's own preferences. Attempts to update another user's preferences are rejected with `403 Forbidden`.
+
+Response `200 OK`:
+
+```json
+{
+  "channels": ["email", "push"],
+  "frequency": "daily",
+  "updated_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Validation errors
+
+Unknown channel names or frequency options are rejected before persistence with `422 Unprocessable Entity` and field-level errors:
+
+```json
+{
+  "error": "validation_failed",
+  "fields": {
+    "channels": "unsupported channel: 'carrier_pigeon'",
+    "frequency": "unsupported frequency: 'hourly'"
+  }
+}
+```
+
+Existing preferences that were stored before validation was introduced remain readable via `GET /notifications/preferences`; only new updates are validated.
+
+---
+
 ## Webhook payload
 
 Deliveries are sent as `POST` requests with `Content-Type: application/json`.
