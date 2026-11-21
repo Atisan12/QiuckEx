@@ -268,3 +268,6 @@ Built with ❤️ by Pulsefy. Powered by Stellar. 🚀
 
 <!-- handsoff-issue-595 -->
 - #595: Create a coherent wallet connection and recovery journey
+
+<!-- handsoff-issue-597 -->
+- #597: Improve form error placement and focus behavior
