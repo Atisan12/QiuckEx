@@ -271,3 +271,6 @@ Built with ❤️ by Pulsefy. Powered by Stellar. 🚀
 
 <!-- handsoff-issue-597 -->
 - #597: Improve form error placement and focus behavior
+
+<!-- handsoff-issue-598 -->
+- #598: Set a consistent confirmation pattern for irreversible actions
