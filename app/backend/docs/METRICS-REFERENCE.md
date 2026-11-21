@@ -100,6 +100,38 @@ means and what to alert on.
   )
   ```
 
+## Health & readiness metrics
+
+Liveness and readiness are reported separately so that a process can stay live
+while a critical persistence dependency (Supabase) is unavailable. Readiness
+reflects the state of critical dependencies; liveness does not.
+
+### `app_dependency_up`
+
+- **Type:** gauge
+- **Labels:** `dependency` (e.g. `supabase`)
+- **Description:** `1` when the dependency is reachable and healthy, `0` when it
+  is degraded or unreachable. Only the dependency name is exposed — never
+  connection strings, keys, or signing material.
+- **Example query** — degraded dependencies:
+
+  ```promql
+  app_dependency_up == 0
+  ```
+
+### `app_readiness_status`
+
+- **Type:** gauge
+- **Labels:** none
+- **Description:** `1` when the service is ready to serve traffic (all critical
+  dependencies healthy), `0` when it is not ready. Liveness is unaffected by
+  this value.
+- **Example query** — not-ready instances:
+
+  ```promql
+  app_readiness_status == 0
+  ```
+
 ## Runtime metrics (default collectors)
 
 These are emitted by `prom-client`'s default collectors and are useful for
@@ -151,6 +183,15 @@ sum(rate(app_escrow_operations_total{status="failure"}[5m])) > 0.1
 ```
 
 - `for: 5m`
+- Severity: `critical`
+
+**Supabase dependency down** — critical persistence dependency unavailable:
+
+```promql
+app_dependency_up{dependency="supabase"} == 0
+```
+
+- `for: 2m`
 - Severity: `critical`
 
 ### P1 — notify, investigate during business hours
