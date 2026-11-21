@@ -68,6 +68,54 @@ Response `204 No Content`.
 
 ---
 
+## Payment status
+
+`GET /payments/:transaction_hash/status`
+
+Returns the authoritative status for a single payment, keyed by its Stellar transaction hash. Repeated reads for the same hash are **monotonic**: once a payment reaches a terminal state it never regresses to `pending`.
+
+### Status transitions
+
+```
+pending ──► confirmed   (terminal)
+pending ──► failed      (terminal)
+```
+
+- `pending` — the transaction has been submitted but not yet confirmed on-chain.
+- `confirmed` — the transaction was observed on Horizon and settled. Terminal.
+- `failed` — the transaction was rejected or definitively not settled. Terminal.
+
+Terminal states (`confirmed`, `failed`) are sticky. A later read will never return `pending` for a hash that has already reached a terminal state.
+
+### Transient upstream failures
+
+If Horizon is temporarily unreachable or returns an error while a payment is still `pending`, the endpoint does **not** fabricate settlement. It returns the last known authoritative state (or an error), never a false `confirmed`/`failed`:
+
+- If a terminal state is already known, that terminal state is returned.
+- If the payment is still `pending` and Horizon cannot be reached, the response is `503 Service Unavailable` with a retryable error body. Clients should retry with backoff.
+
+Response `200 OK`:
+
+```json
+{
+  "transaction_hash": "abc123...",
+  "status": "confirmed",
+  "updated_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+Response `503 Service Unavailable` (transient upstream failure, payment still pending):
+
+```json
+{
+  "error": "upstream_unavailable",
+  "message": "Payment status could not be confirmed; retry with backoff.",
+  "retryable": true
+}
+```
+
+---
+
 ## Webhook payload
 
 Deliveries are sent as `POST` requests with `Content-Type: application/json`.
