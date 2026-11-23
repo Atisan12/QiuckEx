@@ -43,6 +43,12 @@ async function main() {
     .addTag("stellar", "Verified assets, path preview, Soroban preflight")
     .addTag("contracts", "Contract registry publication and discovery")
     .addTag("developer", "Developer self-service: ping, webhook testing, key management, health score")
+    .addTag(
+      "pagination",
+      "Cursor pagination semantics for public APIs: cursors are opaque and must not be " +
+        "constructed by clients, page limits apply, and invalid or expired cursors return " +
+        "documented errors. Follow `nextCursor` until it is null to terminate paging.",
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
