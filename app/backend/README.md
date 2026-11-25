@@ -1,10 +1,18 @@
-# QuickEx Backend (NestJS)
+# Backend
 
-A NestJS-based backend API for the QuickEx Stellar exchange platform.
+## Health and readiness
 
-## Setup
+The backend exposes two distinct probes so that traffic routing can react to
+dependency state without taking a live process out of rotation prematurely.
 
-### 1. Install dependencies
+- **Liveness** (`/health/live`): reports whether the process itself is running.
+  It stays available (HTTP 200) during dependency outages, including a Supabase
+  outage, so orchestrators do not restart a healthy process.
+- **Readiness** (`/health/ready`): reports whether the process can serve traffic.
+  It reflects the state of critical dependencies. When Supabase (the critical
+  persistence dependency) is unavailable, readiness reports `degraded` and
+  returns a non-ready status so traffic is not routed to the instance until the
+  dependency recovers.
 
 From the repository root:
 

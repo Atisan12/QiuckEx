@@ -200,6 +200,15 @@ sum(rate(app_escrow_operations_total{status="failure"}[5m])) > 0.1
 - `for: 5m`
 - Severity: `critical`
 
+**Supabase dependency down** — critical persistence dependency unavailable:
+
+```promql
+app_dependency_up{dependency="supabase"} == 0
+```
+
+- `for: 2m`
+- Severity: `critical`
+
 ### P1 — notify, investigate during business hours
 
 **Elevated error rate** — more than 0.5% of requests failing for 10 minutes:
