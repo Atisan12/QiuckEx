@@ -1,16 +1,16 @@
 import { Module } from "@nestjs/common";
 import { DocsController } from "./docs.controller";
+import { DocsContentService } from "./docs-content.service";
 
 /**
  * Provides the POST /docs/json endpoint that exports the validated OpenAPI
- * specification (used by the CI spec-divergence check).
- *
- * Cursor pagination semantics for public APIs are documented in the OpenAPI
- * schema (opaque cursors, page limits, continuation/termination behavior,
- * cursor expiry and invalid-cursor errors) and surfaced through this module's
- * exported specification.
+ * specification (used by the CI spec-divergence check), along with the
+ * troubleshooting guide (keyed by stable API error codes) and the field-level
+ * privacy and retention reference served by the docs controller.
  */
 @Module({
   controllers: [DocsController],
+  providers: [DocsContentService],
+  exports: [DocsContentService],
 })
 export class DocsModule {}
