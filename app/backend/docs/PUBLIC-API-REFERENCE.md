@@ -97,6 +97,82 @@ When the webhook feature is paused, this endpoint responds with `503 Service Una
 
 ---
 
+## Payment status
+
+`GET /payments/:transaction_hash/status`
+
+Returns the authoritative status for a single payment, keyed by its Stellar transaction hash. Repeated reads for the same hash are **monotonic**: once a payment reaches a terminal state it never regresses to `pending`.
+
+### Status transitions
+
+```
+pending ──► confirmed   (terminal)
+pending ──► failed      (terminal)
+```
+
+- `pending` — the transaction has been submitted but not yet confirmed on-chain.
+- `confirmed` — the transaction was observed on Horizon and settled. Terminal.
+- `failed` — the transaction was rejected or definitively not settled. Terminal.
+
+Terminal states (`confirmed`, `failed`) are sticky. A later read will never return `pending` for a hash that has already reached a terminal state.
+
+### Transient upstream failures
+
+If Horizon is temporarily unreachable or returns an error while a payment is still `pending`, the endpoint does **not** fabricate settlement. It returns the last known authoritative state (or an error), never a false `confirmed`/`failed`:
+
+- If a terminal state is already known, that terminal state is returned.
+- If the payment is still `pending` and Horizon cannot be reached, the response is `503 Service Unavailable` with a retryable error body. Clients should retry with backoff.
+
+Response `200 OK`:
+
+```json
+{
+  "transaction_hash": "abc123...",
+  "status": "confirmed",
+  "updated_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+Response `503 Service Unavailable` (transient upstream failure, payment still pending):
+
+```json
+{
+  "error": "upstream_unavailable",
+  "message": "Payment status could not be confirmed; retry with backoff.",
+  "retryable": true
+}
+```
+
+---
+
+## Reconciliation
+
+Reconciliation runs over a ledger interval. To keep each run within request time and memory limits, a run processes a **bounded ledger range** per job and persists a resumable cursor with the run metadata.
+
+### Bounded range & cursor
+
+- Each job processes at most `limit` ledgers per invocation. `limit` is configurable but clamped to a safe range (`min`–`max`); out-of-range values are rejected or clamped to the nearest bound.
+- The run metadata records a `cursor` (the last fully processed ledger sequence). A restart resumes from `cursor + 1`, so no ledger is skipped or double-counted.
+- Progress is observable via the run metadata: `cursor`, `limit`, `processed`, and `complete`.
+
+Response `200 OK` (run metadata):
+
+```json
+{
+  "run_id": "rec_01HXYZ...",
+  "from_ledger": 1000,
+  "to_ledger": 5000,
+  "cursor": 1499,
+  "limit": 500,
+  "processed": 500,
+  "complete": false
+}
+```
+
+When `complete` is `true`, `cursor` equals `to_ledger` and the run is finished. Restarting an incomplete run resumes from `cursor + 1`.
+
+---
+
 ## Webhook payload
 
 Deliveries are sent as `POST` requests with `Content-Type: application/json`.
