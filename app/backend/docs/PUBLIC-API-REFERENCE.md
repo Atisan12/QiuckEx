@@ -64,6 +64,8 @@ Response `201 Created`:
 }
 ```
 
+When the webhook feature is paused, this endpoint responds with `503 Service Unavailable` and no webhook is created.
+
 ### List webhooks
 
 `GET /webhooks`
@@ -83,11 +85,15 @@ Response `200 OK`:
 ]
 ```
 
+This read remains available while paused.
+
 ### Delete a webhook
 
 `DELETE /webhooks/:id`
 
 Response `204 No Content`.
+
+When the webhook feature is paused, this endpoint responds with `503 Service Unavailable` and the webhook is left untouched.
 
 ---
 
@@ -119,6 +125,7 @@ Deliveries are sent as `POST` requests with `Content-Type: application/json`.
 - A delivery is considered successful when your endpoint responds with a `2xx` status code.
 - Failed deliveries are retried with exponential backoff: up to **5 retries over 24 hours**.
 - Each attempt is logged (timestamp, status code, response snippet) and can be inspected via the delivery log.
+- While the webhook feature is paused, new deliveries are suspended and resume after unpause; retry/backoff and logging semantics are unchanged.
 
 ### Signature verification
 
