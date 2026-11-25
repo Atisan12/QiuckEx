@@ -10,6 +10,29 @@ Authorization: Bearer <access_token>
 
 ---
 
+## Privacy modes
+
+QuickEx links can be created in one of two privacy modes. The table below states exactly what each mode exposes on-chain and off-chain. No mode hides information that the Stellar network itself records publicly.
+
+| Information | Public mode | Private mode |
+| --- | --- | --- |
+| Link URL / slug | Public — anyone with the URL can view the link | Public — the URL is still required to open the link |
+| Recipient address | Public — visible in the link and on-chain | Public — the destination address is recorded on-chain |
+| Sender address | Public — recorded on-chain | Public — recorded on-chain |
+| Amount & asset | Public — recorded on-chain | Public — recorded on-chain |
+| Transaction hash | Public — recorded on-chain | Public — recorded on-chain |
+| Link metadata (memo, label) | Public — returned by the API | Private — omitted from public API responses |
+| Link listing / discovery | Public — appears in public listings | Private — excluded from public listings |
+
+Notes:
+
+- **Private mode does not make on-chain data confidential.** Stellar transactions are public by design; amounts, addresses, and transaction hashes are always visible on the ledger.
+- Private mode only limits off-chain exposure: link metadata is not returned by public API responses and the link is excluded from public listings.
+- Privacy modes are subject to network availability. If a mode is unavailable on the current network, it cannot be selected when creating a link; the API rejects such requests with `422 Unprocessable Entity`.
+- See the [privacy policy](https://quickex.example/privacy) for how QuickEx handles personal data.
+
+---
+
 ## Webhooks
 
 Register a webhook URL to receive a `POST` request whenever a payment to one of your QuickEx links is confirmed on the Stellar network.
@@ -41,6 +64,8 @@ Response `201 Created`:
 }
 ```
 
+When the webhook feature is paused, this endpoint responds with `503 Service Unavailable` and no webhook is created.
+
 ### List webhooks
 
 `GET /webhooks`
@@ -60,11 +85,15 @@ Response `200 OK`:
 ]
 ```
 
+This read remains available while paused.
+
 ### Delete a webhook
 
 `DELETE /webhooks/:id`
 
 Response `204 No Content`.
+
+When the webhook feature is paused, this endpoint responds with `503 Service Unavailable` and the webhook is left untouched.
 
 ---
 
@@ -146,6 +175,7 @@ Deliveries are sent as `POST` requests with `Content-Type: application/json`.
 - A delivery is considered successful when your endpoint responds with a `2xx` status code.
 - Failed deliveries are retried with exponential backoff: up to **5 retries over 24 hours**.
 - Each attempt is logged (timestamp, status code, response snippet) and can be inspected via the delivery log.
+- While the webhook feature is paused, new deliveries are suspended and resume after unpause; retry/backoff and logging semantics are unchanged.
 
 ### Signature verification
 
@@ -211,98 +241,66 @@ def quickex_hook():
 
 ---
 
-## Contract registry
+## Contract upgrades
 
-Read the currently active version of a contract from the registry.
+Upgrade authorization is **single-use and artifact-bound**. An approval is only valid for the exact WASM hash and version it was issued for, and only within its approval window.
 
-### Get a contract registry entry
+### Request an upgrade approval
 
-`GET /contracts/:id`
+`POST /admin/upgrades/authorize`
 
-Response `200 OK` includes an `ETag` header derived from the active contract version:
-
-```json
-{
-  "id": "contract_01HXYZ...",
-  "version": 3,
-  "etag": "\"v3\"",
-  "updated_at": "2024-01-01T00:00:00.000Z"
-}
-```
-
-### Conditional requests
-
-Send `If-None-Match` with a previously received `ETag` to avoid re-downloading an unchanged entry:
-
-```
-GET /contracts/contract_01HXYZ...
-If-None-Match: "v3"
-```
-
-- `304 Not Modified` is returned only when the supplied `ETag` matches the **current** active version.
-- `200 OK` with the current body and a new `ETag` is returned when the version has changed.
-
-### Rollback
-
-`POST /contracts/:id/rollback`
-
-Rolls the contract back to a previous version. A successful rollback:
-
-- Bumps the registry `version` and therefore changes the `ETag`.
-- Invalidates the affected backend caches, so the next read returns the rolled-back version.
-- Causes conditional requests carrying the pre-rollback `ETag` to return `200 OK` with the rolled-back version instead of a stale `304 Not Modified`.
-
-Response `200 OK`:
+Request body:
 
 ```json
 {
-  "id": "contract_01HXYZ...",
-  "version": 4,
-  "etag": "\"v4\"",
-  "updated_at": "2024-01-01T00:00:05.000Z"
+  "wasm_hash": "<hex-encoded sha256 of the approved wasm>",
+  "version": "1.4.0",
+  "expires_at": "2024-01-01T01:00:00.000Z"
 }
 ```
 
----
+- `wasm_hash` (required) — the exact artifact hash the approval is bound to.
+- `version` (required) — the target contract version the approval is bound to.
+- `expires_at` (required) — end of the approval window; the approval is rejected at or after this time.
 
-## API compatibility reporting
-
-The compatibility gate compares the current API surface against a recorded baseline and reports breaking changes. Beyond route removal, the report also flags response-shape drift so consumers are not surprised by silent contract changes.
-
-### Breaking-change classes
-
-| Class | Example | Reported as |
-| --- | --- | --- |
-| Route removed | `DELETE /webhooks/:id` no longer exists | `route_removed` |
-| Required field added | `frequency` becomes required on `PUT /notifications/preferences` | `required_field_added` |
-| Field removed | `updated_at` dropped from the preferences response | `field_removed` |
-| Type changed | `version` changes from `number` to `string` | `type_changed` |
-| Enum value removed | `weekly` removed from supported frequencies | `enum_value_removed` |
-| Error response removed | documented `422` no longer returned | `error_response_removed` |
-
-### Report format
-
-Each finding identifies the affected route and field:
+Response `201 Created`:
 
 ```json
 {
-  "breaking": true,
-  "findings": [
-    {
-      "route": "PUT /notifications/preferences",
-      "field": "frequency",
-      "class": "enum_value_removed",
-      "detail": "enum value 'weekly' no longer accepted"
-    },
-    {
-      "route": "GET /contracts/:id",
-      "field": "version",
-      "class": "type_changed",
-      "detail": "expected number, found string"
-    }
-  ]
+  "id": "up_01HXYZ...",
+  "wasm_hash": "<hex-encoded sha256 of the approved wasm>",
+  "version": "1.4.0",
+  "expires_at": "2024-01-01T01:00:00.000Z",
+  "status": "pending"
 }
 ```
 
-- Unchanged schemas produce `"breaking": false` with an empty `findings` array.
-- Additive, non-breaking changes (new optional fields, new routes) are not reported as breaking.
+### Apply an upgrade
+
+`POST /admin/upgrades/:id/apply`
+
+Request body:
+
+```json
+{
+  "wasm_hash": "<hex-encoded sha256 of the approved wasm>",
+  "version": "1.4.0"
+}
+```
+
+The supplied `wasm_hash` and `version` must match the values the approval was issued for. The approval is consumed on success and cannot be reused.
+
+Failure responses (no code or registry state is changed):
+
+| Status | Condition |
+| --- | --- |
+| `409 Conflict` | Approval already consumed (replay attempt). |
+| `410 Gone` | Approval window has expired. |
+| `422 Unprocessable Entity` | `wasm_hash` or `version` does not match the approved artifact. |
+| `409 Conflict` | Approval was cancelled. |
+
+### Cancel an upgrade approval
+
+`POST /admin/upgrades/:id/cancel`
+
+Response `204 No Content`. A cancelled approval can no longer be applied.
