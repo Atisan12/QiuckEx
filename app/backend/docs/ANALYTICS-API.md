@@ -14,15 +14,13 @@ The Analytics API provides aggregated usage and financial metrics for the Develo
 - **Organization scoping**: Data automatically filtered to authenticated organization
 - **Caching**: 5-minute cache on aggregations reduces database load
 
-### Data Freshness
+## Ownership Scoping
 
-Analytics responses may be served from cache. To make cached data visually distinct from live data, every response includes freshness metadata so clients can render a subtle but clear indicator:
+All analytics queries are scoped to the authenticated caller at the service/query boundary. When a request supplies a `username` or `tenant` identifier, the service applies an explicit ownership filter so that only data belonging to that caller's scope is ever aggregated or returned.
 
-- `metadata.generatedAt` — ISO 8601 timestamp of when the underlying aggregation was computed. Clients display this as the "as of" timestamp next to the data.
-- `metadata.cacheStatus` — `"live"` when the response was computed for this request, or `"cached"` when served from the cache.
-- `metadata.cacheAgeSeconds` — number of seconds since the cached aggregation was generated (`0` for live responses).
-
-When `cacheStatus` is `"cached"`, clients must show a text label (e.g. "Cached data") together with the `generatedAt` timestamp, and expose the same information to assistive technology (e.g. `aria-label="Cached data as of <timestamp>"`). When a subsequent request returns `cacheStatus: "live"`, the normal (non-stale) styling is restored. This prevents cached values from appearing current during a dependency outage.
+- **Authorized requests** see only their own scope. The ownership filter is applied in the query itself, not after the fact, so cross-owner rows are never loaded.
+- **Unauthorized identifiers** (a `username` or `tenant` that does not belong to the caller) return the documented response for that endpoint — `403 Forbidden` for per-username endpoints, or `404 Not Found` for tenant-scoped resources — without revealing whether the identifier exists. The response is identical whether the identifier is unknown or owned by someone else.
+- Ownership is derived from the authenticated principal (API key / bearer token), never from client-supplied identifiers alone.
 
 ## Endpoints
 
@@ -108,7 +106,7 @@ curl -X GET "http://localhost:3000/analytics/alice/earnings?period=month&from=20
 
 **Endpoint**: `GET /analytics/stats`
 
-**Description**: Returns time-series metrics for a specified date range, grouped by the requested granularity.
+**Description**: Returns time-series metrics for a specified date range, grouped by the requested granularity. Results are scoped to the authenticated caller's organization/tenant.
 
 **Query Parameters**:
 
@@ -207,6 +205,8 @@ curl -X GET "http://localhost:3000/analytics/alice/earnings?period=month&from=20
 - `200 OK`: Successfully retrieved statistics
 - `400 Bad Request`: Invalid date format, date range, or other validation error
 - `401 Unauthorized`: Missing or invalid API key
+- `403 Forbidden`: Supplied `tenant`/`username` identifier is not owned by the caller
+- `404 Not Found`: Supplied tenant-scoped identifier does not exist or is not owned by the caller (indistinguishable)
 - `429 Too Many Requests`: Rate limit exceeded
 - `500 Internal Server Error`: Server error
 
@@ -236,7 +236,7 @@ curl -X GET "http://localhost:3000/analytics/stats?startDate=2026-01-01T00:00:00
 
 **Endpoint**: `GET /analytics/stats/comparison`
 
-**Description**: Returns side-by-side comparison of current period with the equivalent previous period, showing percentage changes for all metrics.
+**Description**: Returns side-by-side comparison of current period with the equivalent previous period, showing percentage changes for all metrics. Results are scoped to the authenticated caller's organization/tenant.
 
 **Query Parameters**: Same as `/analytics/stats` (minus `includeComparison` flag)
 
