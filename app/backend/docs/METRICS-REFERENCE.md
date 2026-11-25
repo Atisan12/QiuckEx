@@ -100,36 +100,51 @@ means and what to alert on.
   )
   ```
 
-## Health & readiness metrics
+## Reconciliation metrics
 
-Liveness and readiness are reported separately so that a process can stay live
-while a critical persistence dependency (Supabase) is unavailable. Readiness
-reflects the state of critical dependencies; liveness does not.
+Reconciliation runs process a bounded ledger range per job and persist a
+resumable cursor with the run metadata. The following metrics expose progress so
+operators can observe a run advancing (or stalling) across bounded batches.
 
-### `app_dependency_up`
+### `app_reconciliation_ledgers_processed_total`
 
-- **Type:** gauge
-- **Labels:** `dependency` (e.g. `supabase`)
-- **Description:** `1` when the dependency is reachable and healthy, `0` when it
-  is degraded or unreachable. Only the dependency name is exposed — never
-  connection strings, keys, or signing material.
-- **Example query** — degraded dependencies:
+- **Type:** counter
+- **Labels:** `run_id`
+- **Description:** Total ledgers processed by reconciliation, partitioned by run.
+  Increments once per ledger as each bounded batch is committed, so the sum
+  across a run reflects durable progress (no double-counting on resume).
+- **Example query** — ledgers processed per run over 5m:
 
   ```promql
-  app_dependency_up == 0
+  sum by (run_id) (rate(app_reconciliation_ledgers_processed_total[5m]))
   ```
 
-### `app_readiness_status`
+### `app_reconciliation_cursor_ledger`
 
 - **Type:** gauge
-- **Labels:** none
-- **Description:** `1` when the service is ready to serve traffic (all critical
-  dependencies healthy), `0` when it is not ready. Liveness is unaffected by
-  this value.
-- **Example query** — not-ready instances:
+- **Labels:** `run_id`
+- **Description:** The last ledger sequence durably committed to the run's
+  resumable cursor. On restart the run resumes from this cursor, so a stalled
+  gauge indicates a run that is not making progress.
+- **Example query** — cursor position per run:
 
   ```promql
-  app_readiness_status == 0
+  app_reconciliation_cursor_ledger
+  ```
+
+### `app_reconciliation_batch_duration_seconds`
+
+- **Type:** histogram
+- **Labels:** `run_id`
+- **Description:** Wall-clock duration in seconds of each bounded reconciliation
+  batch. Use this to tune the configured batch size within its safe bounds.
+- **Example query** — p95 batch duration per run over 10m:
+
+  ```promql
+  histogram_quantile(
+    0.95,
+    sum by (le, run_id) (rate(app_reconciliation_batch_duration_seconds_bucket[10m]))
+  )
   ```
 
 ## Runtime metrics (default collectors)
@@ -229,6 +244,16 @@ histogram_quantile(
 ```
 
 - `for: 10m`
+- Severity: `warning`
+
+**Stalled reconciliation run** — a run whose cursor has not advanced for 15
+minutes while it is still active:
+
+```promql
+increase(app_reconciliation_ledgers_processed_total[15m]) == 0
+```
+
+- `for: 15m`
 - Severity: `warning`
 
 **Event loop lag** — event loop lag above 100ms for 10 minutes:
